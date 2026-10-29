@@ -17,17 +17,23 @@ export default function Home() {
       const cleanUrl = boardUrl.replace(/\/$/, '');
       const rssUrl = `${cleanUrl}.rss`;
       
-      // Utilisation d'un proxy public gratuit pour contourner les restrictions CORS du navigateur
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+      // Utilisation d'un autre proxy public plus stable pour le format XML/RSS
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
       const res = await fetch(proxyUrl);
-      const data = await res.json();
 
-      if (!data.contents) {
-        throw new Error("Impossible de récupérer le tableau. Vérifiez qu'il est public.");
+      if (!res.ok) {
+        throw new Error("Impossible d'accéder à ce tableau. Assurez-vous qu'il est public.");
+      }
+
+      const xmlText = await res.text();
+
+      // Vérification si le proxy renvoie du HTML par erreur
+      if (xmlText.trim().startsWith('<!DOCTYPE') || xmlText.trim().startsWith('<html')) {
+        throw new Error("Pinterest a bloqué la requête ou le tableau n'existe pas.");
       }
 
       const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(data.contents, "text/xml");
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
       const items = xmlDoc.querySelectorAll('item');
 
       if (items.length === 0) {
@@ -40,7 +46,6 @@ export default function Home() {
           const title = item.querySelector('title')?.textContent || 'Épingle';
           const description = item.querySelector('description')?.textContent || '';
           
-          // Extraire l'URL de l'image depuis la balise description (HTML brut)
           const imgMatch = description.match(/src="([^"]+)"/);
           const imageUrl = imgMatch ? imgMatch[1] : '';
 
@@ -52,7 +57,7 @@ export default function Home() {
 
       setPins(fetchedPins);
     } catch (err) {
-      setError(err.message || "Une erreur est survenue.");
+      setError(err.message || "Une erreur est survenue lors de l'analyse.");
     } finally {
       setLoading(false);
     }
