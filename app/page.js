@@ -17,47 +17,31 @@ export default function Home() {
       const cleanUrl = boardUrl.replace(/\/$/, '');
       const rssUrl = `${cleanUrl}.rss`;
       
-      // Utilisation d'un autre proxy public plus stable pour le format XML/RSS
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`;
-      const res = await fetch(proxyUrl);
+      // Utilisation d'un service de conversion RSS vers JSON direct et sécurisé
+      const apiURL = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+      const res = await fetch(apiURL);
+      const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error("Impossible d'accéder à ce tableau. Assurez-vous qu'il est public.");
+      if (data.status !== 'ok' || !data.items) {
+        throw new Error("Impossible de récupérer ce tableau. Vérifiez qu'il est public et que l'URL est correcte.");
       }
 
-      const xmlText = await res.text();
+      const fetchedPins = data.items.map(item => {
+        // Extraction de l'image depuis la description HTML de l'item RSS
+        const imgMatch = item.description.match(/src="([^"]+)"/);
+        return {
+          title: item.title || 'Épingle',
+          imageUrl: imgMatch ? imgMatch[1] : ''
+        };
+      }).filter(pin => pin.imageUrl !== '');
 
-      // Vérification si le proxy renvoie du HTML par erreur
-      if (xmlText.trim().startsWith('<!DOCTYPE') || xmlText.trim().startsWith('<html')) {
-        throw new Error("Pinterest a bloqué la requête ou le tableau n'existe pas.");
+      if (fetchedPins.length === 0) {
+        throw new Error("Aucune image trouvée dans ce tableau.");
       }
 
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-      const items = xmlDoc.querySelectorAll('item');
-
-      if (items.length === 0) {
-        throw new Error("Aucune épingle trouvée dans ce tableau.");
-      }
-
-      const fetchedPins = [];
-      items.forEach((item, index) => {
-        if (index < 10) {
-          const title = item.querySelector('title')?.textContent || 'Épingle';
-          const description = item.querySelector('description')?.textContent || '';
-          
-          const imgMatch = description.match(/src="([^"]+)"/);
-          const imageUrl = imgMatch ? imgMatch[1] : '';
-
-          if (imageUrl) {
-            fetchedPins.push({ title, imageUrl });
-          }
-        }
-      });
-
-      setPins(fetchedPins);
+      setPins(fetchedPins.slice(0, 10));
     } catch (err) {
-      setError(err.message || "Une erreur est survenue lors de l'analyse.");
+      setError(err.message || "Une erreur est survenue.");
     } finally {
       setLoading(false);
     }
